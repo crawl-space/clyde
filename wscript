@@ -6,17 +6,21 @@ APPNAME = "clyde"
 def configure(conf):
     conf.check_tool("gcc")
 
-    conf.check_cfg(package="glib-2.0", mandatory=True)
-    conf.check_cfg(package="gtk+-2.0", mandatory=True)
+    conf.check_cfg(package="glib-2.0", uselib_store="GLIB",
+            args="--cflags --libs", mandatory=True)
+    conf.check_cfg(package="gtk+-2.0", uselib_store="GTK",
+            args="--cflags --libs", mandatory=True)
 
     conf.define("VERSION", VERSION)
 
+    conf.write_config_header()
+
 def build(bld):
-    obj = bld.new_task_gen(
+    applet = bld.new_task_gen(
             features = "cc cprogram",
             includes = "# src/applet",
-            uselib = "GTK",
+            uselib = "GLIB",
             target = "clyde"
     )
 
-    obj.find_sources_in_dirs("src/applet")
+    applet.find_sources_in_dirs("src/applet")
