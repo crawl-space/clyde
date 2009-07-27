@@ -15,6 +15,13 @@ GIOChannel *
 get_joystick (void)
 {
 	int fd = open ("/dev/input/js0", O_RDONLY);
+
+	if (fd == -1) {
+		printf ("Error opening joystick\n");
+
+		return NULL;
+	}
+
 	GIOChannel *js = g_io_channel_unix_new (fd);
 
 	return js;
@@ -90,6 +97,11 @@ int
 main (int argc, char** argv)
 {
 	GIOChannel *js = get_joystick ();
+
+	if (js == NULL) {
+		printf ("No joystick found. exiting.\n");
+		return 0;
+	}
 
 	gtk_init (&argc, &argv);
 
