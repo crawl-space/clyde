@@ -8,6 +8,8 @@ def configure(conf):
 
     conf.check_cfg(package="glib-2.0", uselib_store="GLIB",
             args="--cflags --libs", mandatory=True)
+    conf.check_cfg(package="gdk-2.0", uselib_store="GDK",
+            args="--cflags --libs", mandatory=True)
     conf.check_cfg(package="gtk+-2.0", uselib_store="GTK",
             args="--cflags --libs", mandatory=True)
 
@@ -19,7 +21,7 @@ def build(bld):
     applet = bld.new_task_gen(
             features = "cc cprogram",
             includes = "# src/applet",
-            uselib = "GLIB",
+            uselib = "GLIB GDK GTK",
             target = "clyde"
     )
 
