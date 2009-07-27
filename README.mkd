@@ -4,3 +4,22 @@ Clyde
 Clyde is yet another app that sits in your notification area pretending to be
 an applet. More specifically, it remaps joystick events into keyboard events,
 so you can write code with a PlayStation 3 controller, for example.
+
+Building
+========
+
+Clyde uses [waf][] for building. You'll need to run:
+
+    waf configure
+
+First before running:
+
+    waf build
+
+Clyde also needs (for Fedora, use -dev on debian):
+
+  - glib2-devel
+  - gtk+-2.0-devel
+
+
+[waf]: http://code.google.com/p/waf "waf - The flexible build system"
