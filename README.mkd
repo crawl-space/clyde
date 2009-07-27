@@ -1,0 +1,6 @@
+Clyde
+=====
+
+Clyde is yet another app that sits in your notification area pretending to be
+an applet. More specifically, it remaps joystick events into keyboard events,
+so you can write code with a PlayStation 3 controller, for example.
