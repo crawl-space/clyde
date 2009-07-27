@@ -32,18 +32,18 @@ get_active_window (Display *display, int root_window)
 {
 	int status;
 
+	Atom request;
 	Atom actual_type;
 	int actual_format;
 	long nitems;
 	long bytes;
 	long *data;
 
-        status = XGetWindowProperty(display, root_window,
-				    XInternAtom(display, "_NET_ACTIVE_WINDOW",
-						TRUE),
-				    0, (~0L), False, AnyPropertyType,
-				    &actual_type, &actual_format, &nitems,
-				    &bytes, (unsigned char**)&data);
+	request = XInternAtom (display, "_NET_ACTIVE_WINDOW", TRUE);
+	status = XGetWindowProperty(display, root_window, request, 0, (~0L),
+				    False, AnyPropertyType, &actual_type,
+				    &actual_format, &nitems, &bytes,
+				    (unsigned char**)&data);
 
 	return data[0];
 }
