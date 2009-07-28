@@ -20,6 +20,7 @@
 	(unsigned char)(1U << ((n) % CHAR_BIT))) ? 1 : 0)
 
 struct joystick {
+	char *driver_name;
 	GIOChannel *io;
 	int num_axes;
 	int num_buttons;
@@ -41,6 +42,8 @@ populate_map (int *map, int size)
 	}
 }
 
+#define BUF_SIZE 256
+
 struct joystick *
 get_joystick (void)
 {
@@ -56,6 +59,11 @@ get_joystick (void)
 
 	js->io = g_io_channel_unix_new (fd);
 
+	js->driver_name = malloc (sizeof (char) * BUF_SIZE);
+	if (ioctl (fd, JSIOCGNAME (BUF_SIZE), js->driver_name) < 0) {
+		strcpy (js->driver_name, "Generic Joystick");
+	}
+	
 	ioctl (fd, JSIOCGAXES, &(js->num_axes));
 	ioctl (fd, JSIOCGBUTTONS, &(js->num_buttons));
 
@@ -69,8 +77,8 @@ get_joystick (void)
 	populate_map (js->axes_map, js->num_axes);
 	populate_map (js->button_map, js->num_buttons);
 
-	printf ("joystick initialized: %d axes, %d buttons\n", js->num_axes,
-		js->num_buttons);
+	printf ("%s initialized: %d axes, %d buttons\n",
+		js->driver_name, js->num_axes, js->num_buttons);
 
 	return js;
 }
