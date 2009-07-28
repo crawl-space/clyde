@@ -31,10 +31,13 @@ struct joystick {
 void
 populate_map (int *map, int size)
 {
+	/* XXX static for mednafen */
+	static int mednafen[18] = {23, -1, -1, 36, 25, 39, 52, 38, -1, -1, 84,
+		85, -1, -1, 89, 88, -1, -1};
 	int i;
 
 	for (i = 0; i < size; i++) {
-		map[i] = 39;
+		map[i] = mednafen[i];
 	}
 }
 
@@ -127,11 +130,11 @@ js_data_available (GIOChannel *io, GIOCondition cond, gpointer *data)
 			    sizeof (event));
 
 	if (len == sizeof (event)) {
+		if (event.type == JS_EVENT_BUTTON &&
+		    js->button_map[event.number] != -1) {
+			printf ("button event :: v - %d n - %d\n", event.value,
+				event.number);
 
-		printf ("data :: v - %d t - %d n - %d\n", event.value,
-			event.type, event.number);
-
-		if (event.type == JS_EVENT_BUTTON) {
 			if (event.value == 1) { // && TEST_BIT (js-> 
 				send_key (js->button_map[event.number], TRUE);
 			} else if (event.value != 1) {
