@@ -119,6 +119,8 @@ send_key (int key, gboolean press)
 
 	XSendEvent (display, window, FALSE, event.xkey.state, &event);
 	XFlush (display);
+
+	XCloseDisplay (display);
 }
 
 gboolean
