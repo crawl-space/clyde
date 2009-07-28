@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <linux/joystick.h>
@@ -11,7 +12,33 @@
 
 #include <X11/Xlib.h>
 
-GIOChannel *
+#define SET_BIT(a, n) (a)[(n) / CHAR_BIT] |= \
+	(unsigned char)(1U << ((n) % CHAR_BIT))
+#define CLEAR_BIT(a, n) (a)[(n) / CHAR_BIT] &= \
+	(unsigned char)(~(1U << ((n) % CHAR_BIT)))
+#define TEST_BIT(a, n) (((a)[(n) / CHAR_BIT] & \
+	(unsigned char)(1U << ((n) % CHAR_BIT))) ? 1 : 0)
+
+struct joystick {
+	GIOChannel *io;
+	int num_axes;
+	int num_buttons;
+	unsigned char *active_axes;
+	int *axes_map;
+	int *button_map;
+};
+
+void
+populate_map (int *map, int size)
+{
+	int i;
+
+	for (i = 0; i < size; i++) {
+		map[i] = 39;
+	}
+}
+
+struct joystick *
 get_joystick (void)
 {
 	int fd = open ("/dev/input/js0", O_RDONLY);
@@ -22,7 +49,25 @@ get_joystick (void)
 		return NULL;
 	}
 
-	GIOChannel *js = g_io_channel_unix_new (fd);
+	struct joystick *js = malloc (sizeof (struct joystick));
+
+	js->io = g_io_channel_unix_new (fd);
+
+	ioctl (fd, JSIOCGAXES, &(js->num_axes));
+	ioctl (fd, JSIOCGBUTTONS, &(js->num_buttons));
+
+	/* XXX do rounding properly */
+	js->active_axes = malloc (js->num_axes / 8 + 1);
+	memset (js->active_axes, 0, js->num_axes / 8 + 1);
+
+	js->axes_map = malloc (sizeof (int) * js->num_axes);
+	js->button_map = malloc (sizeof (int) * js->num_buttons);
+
+	populate_map (js->axes_map, js->num_axes);
+	populate_map (js->button_map, js->num_buttons);
+
+	printf ("joystick initialized: %d axes, %d buttons\n", js->num_axes,
+		js->num_buttons);
 
 	return js;
 }
@@ -49,7 +94,7 @@ get_active_window (Display *display, int root_window)
 }
 
 static void
-send_key (char key, gboolean press)
+send_key (int key, gboolean press)
 {
 	Display *display = XOpenDisplay (NULL);
 	int screen = DefaultScreen (display);
@@ -67,18 +112,18 @@ send_key (char key, gboolean press)
 
 	event.xkey.type = press ? KeyPress : KeyRelease;
 	event.xkey.state = 0x0;
-	event.xkey.keycode = 38;
+	event.xkey.keycode = key;
 
 	XSendEvent (display, window, FALSE, event.xkey.state, &event);
 	XFlush (display);
 }
 
 gboolean
-js_data_available (GIOChannel *js, GIOCondition cond, gpointer *data)
+js_data_available (GIOChannel *io, GIOCondition cond, gpointer *data)
 {
+	struct joystick *js = (struct joystick *) data;
 	struct js_event event;
-
-	ssize_t len = read (g_io_channel_unix_get_fd (js), &event,
+	ssize_t len = read (g_io_channel_unix_get_fd (io), &event,
 			    sizeof (event));
 
 	if (len == sizeof (event)) {
@@ -86,8 +131,13 @@ js_data_available (GIOChannel *js, GIOCondition cond, gpointer *data)
 		printf ("data :: v - %d t - %d n - %d\n", event.value,
 			event.type, event.number);
 
-		send_key ('a', event.value == 1 ? TRUE : FALSE);
-
+		if (event.type == JS_EVENT_BUTTON) {
+			if (event.value == 1) { // && TEST_BIT (js-> 
+				send_key (js->button_map[event.number], TRUE);
+			} else if (event.value != 1) {
+				send_key (js->button_map[event.number], FALSE);
+			}
+		}
 	}
 
 	return TRUE;
@@ -96,7 +146,7 @@ js_data_available (GIOChannel *js, GIOCondition cond, gpointer *data)
 int
 main (int argc, char** argv)
 {
-	GIOChannel *js = get_joystick ();
+	struct joystick *js = get_joystick ();
 
 	if (js == NULL) {
 		printf ("No joystick found. exiting.\n");
@@ -105,7 +155,7 @@ main (int argc, char** argv)
 
 	gtk_init (&argc, &argv);
 
-	g_io_add_watch (js, G_IO_IN, (GIOFunc) js_data_available, NULL);
+	g_io_add_watch (js->io, G_IO_IN, (GIOFunc) js_data_available, js);
 
 	gtk_main ();
 
