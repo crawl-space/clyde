@@ -159,7 +159,7 @@ js_data_available (GIOChannel *io, GIOCondition cond, gpointer *data)
 static GtkStatusIcon *
 make_status_icon (void)
 {
-	return gtk_status_icon_new_from_stock (GTK_STOCK_FLOPPY);
+	return gtk_status_icon_new_from_icon_name ("input-gaming");
 }
 
 int
