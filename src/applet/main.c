@@ -156,6 +156,12 @@ js_data_available (GIOChannel *io, GIOCondition cond, gpointer *data)
 	return TRUE;
 }
 
+static GtkStatusIcon *
+make_status_icon (void)
+{
+	return gtk_status_icon_new_from_stock (GTK_STOCK_FLOPPY);
+}
+
 int
 main (int argc, char** argv)
 {
@@ -169,6 +175,8 @@ main (int argc, char** argv)
 	gtk_init (&argc, &argv);
 
 	g_io_add_watch (js->io, G_IO_IN, (GIOFunc) js_data_available, js);
+
+	GtkStatusIcon *icon = make_status_icon ();
 
 	gtk_main ();
 
