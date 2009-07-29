@@ -22,6 +22,7 @@
 	(unsigned char)(1U << ((n) % CHAR_BIT))) ? 1 : 0)
 
 struct joystick {
+	char *path;
 	char *driver_name;
 	GIOChannel *io;
 	u_int8_t num_axes;
@@ -59,6 +60,7 @@ get_joystick (const char *path)
 
 	struct joystick *js = malloc (sizeof (struct joystick));
 
+	js->path = strdup (path);
 	js->io = g_io_channel_unix_new (fd);
 
 	js->driver_name = malloc (sizeof (char) * BUF_SIZE);
@@ -83,6 +85,24 @@ get_joystick (const char *path)
 		js->driver_name, js->num_axes, js->num_buttons);
 
 	return js;
+}
+
+void
+joystick_free (struct joystick *js)
+{
+	int fd = g_io_channel_unix_get_fd (js->io);
+
+	free (js->path);
+
+	g_io_channel_shutdown (js->io, FALSE, NULL);
+	close (fd);
+
+	free (js->driver_name);
+
+	free (js->axes_map);
+	free (js->button_map);
+
+	free (js);
 }
 
 static int
@@ -164,12 +184,14 @@ make_status_icon (void)
 	return gtk_status_icon_new_from_icon_name ("input-gaming");
 }
 
-static void
+static struct joystick *
 setup_joystick (const char *path)
 {
 	struct joystick *js = get_joystick (path);
 
 	g_io_add_watch (js->io, G_IO_IN, (GIOFunc) js_data_available, js);
+
+	return js;
 }
 
 static const char *subsystems[] = {"input", NULL};
@@ -186,7 +208,7 @@ make_devkit_client (void)
 	return client;
 }
 
-static void
+static struct joystick *
 setup_if_joystick (DevkitDevice *dev)
 {
 	const char *class = devkit_device_get_property (dev, "ID_CLASS");
@@ -198,13 +220,15 @@ setup_if_joystick (DevkitDevice *dev)
 		/* We only care about /dev/input/jsX joysticks */
 		if (strstr (last_slash + 1 , "js") != NULL) {
 			printf ("joystick found at %s\n", path);
-			setup_joystick (path);
+			return setup_joystick (path);
 		}
 	}
+
+	return NULL;
 }
 
 static void
-setup_initial_joysticks (DevkitClient *client)
+setup_initial_joysticks (DevkitClient *client, GHashTable *joysticks)
 {
 	GList *devs = devkit_client_enumerate_by_subsystem (client, subsystems,
 							    NULL);
@@ -212,7 +236,11 @@ setup_initial_joysticks (DevkitClient *client)
 
 	while (cur != NULL, cur = cur->next) {
 		DevkitDevice *dev = (DevkitDevice *) cur->data;
-		setup_if_joystick (dev);
+		struct joystick *js = setup_if_joystick (dev);
+
+		if (js != NULL) {
+			g_hash_table_insert (joysticks, js->path, js);
+		}
 		g_object_unref (dev);
 	}
 
@@ -223,22 +251,47 @@ void
 handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
 		     gpointer data)
 {
+	GHashTable *joysticks = (GHashTable *) data;
+
 	if (!strcmp ("add", action)) {
 		printf ("device add detected\n");
-		setup_if_joystick (dev);
+
+		struct joystick *js = setup_if_joystick (dev);
+
+		if (js != NULL) {
+			g_hash_table_insert (joysticks, js->path, js);
+		}
+	} else if (!strcmp ("remove", action)) {
+		const char *path = devkit_device_get_device_file (dev);
+
+		printf ("device remove detected on %s\n", path);
+
+		struct joystick *js = g_hash_table_lookup (joysticks, path);
+
+		if (js != NULL) {
+			printf ("no longer watching %s on %s\n",
+				js->driver_name, js->path);
+			g_hash_table_remove (joysticks, path);
+			joystick_free (js);
+		}
 	}
 }
 
 int
 main (int argc, char** argv)
 {
+	GHashTable *joysticks = g_hash_table_new (g_str_hash, g_str_equal);
+
 	gtk_init (&argc, &argv);
 
 	DevkitClient *client = make_devkit_client ();
-	setup_initial_joysticks (client);
+	setup_initial_joysticks (client, joysticks);
+
+	printf ("%d joystick(s) found on startup\n",
+		g_hash_table_size (joysticks));
 
 	g_signal_connect (client, "device-event",
-			  (GCallback) handle_devkit_event, NULL);
+			  (GCallback) handle_devkit_event, joysticks);
 
 	GtkStatusIcon *icon = make_status_icon ();
 
