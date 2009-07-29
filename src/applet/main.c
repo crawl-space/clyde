@@ -187,6 +187,23 @@ make_devkit_client (void)
 }
 
 static void
+setup_if_joystick (DevkitDevice *dev)
+{
+	const char *class = devkit_device_get_property (dev, "ID_CLASS");
+
+	if (class != NULL && !strcmp ("joystick", class)) {
+		const char *path = devkit_device_get_device_file (dev);
+		const char *last_slash = rindex (path, '/');
+
+		/* We only care about /dev/input/jsX joysticks */
+		if (strstr (last_slash + 1 , "js") != NULL) {
+			printf ("joystick found at %s\n", path);
+			setup_joystick (path);
+		}
+	}
+}
+
+static void
 setup_initial_joysticks (DevkitClient *client)
 {
 	GList *devs = devkit_client_enumerate_by_subsystem (client, subsystems,
@@ -195,24 +212,21 @@ setup_initial_joysticks (DevkitClient *client)
 
 	while (cur != NULL, cur = cur->next) {
 		DevkitDevice *dev = (DevkitDevice *) cur->data;
-		const char *class = devkit_device_get_property (dev,
-								"ID_CLASS");
-
-		if (class != NULL && !strcmp ("joystick", class)) {
-			const char *path = devkit_device_get_device_file (dev);
-			const char *last_slash = rindex (path, '/');
-
-			/* We only care about /dev/input/jsX joysticks */
-			if (strstr (last_slash + 1 , "js") != NULL) {
-				printf ("joystick found at %s\n", path);
-				setup_joystick (path);
-			}
-		}
-
+		setup_if_joystick (dev);
 		g_object_unref (dev);
 	}
 
 	g_list_free (devs);
+}
+
+void
+handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
+		     gpointer data)
+{
+	if (!strcmp ("add", action)) {
+		printf ("device add detected\n");
+		setup_if_joystick (dev);
+	}
 }
 
 int
@@ -222,6 +236,9 @@ main (int argc, char** argv)
 
 	DevkitClient *client = make_devkit_client ();
 	setup_initial_joysticks (client);
+
+	g_signal_connect (client, "device-event",
+			  (GCallback) handle_devkit_event, NULL);
 
 	GtkStatusIcon *icon = make_status_icon ();
 
