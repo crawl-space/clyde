@@ -25,6 +25,7 @@ struct joystick {
 	char *path;
 	char *driver_name;
 	GIOChannel *io;
+	unsigned int source;
 	u_int8_t num_axes;
 	u_int8_t num_buttons;
 	unsigned char *active_axes;
@@ -94,6 +95,7 @@ joystick_free (struct joystick *js)
 
 	free (js->path);
 
+	g_source_remove (js->source);
 	g_io_channel_shutdown (js->io, FALSE, NULL);
 	close (fd);
 
@@ -189,7 +191,8 @@ setup_joystick (const char *path)
 {
 	struct joystick *js = get_joystick (path);
 
-	g_io_add_watch (js->io, G_IO_IN, (GIOFunc) js_data_available, js);
+	js->source = g_io_add_watch (js->io, G_IO_IN,
+				     (GIOFunc) js_data_available, js);
 
 	return js;
 }
@@ -247,7 +250,7 @@ setup_initial_joysticks (DevkitClient *client, GHashTable *joysticks)
 	g_list_free (devs);
 }
 
-void
+static void
 handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
 		     gpointer data)
 {
@@ -291,7 +294,7 @@ main (int argc, char** argv)
 		g_hash_table_size (joysticks));
 
 	g_signal_connect (client, "device-event",
-			  (GCallback) handle_devkit_event, joysticks);
+			  G_CALLBACK (handle_devkit_event), joysticks);
 
 	GtkStatusIcon *icon = make_status_icon ();
 
