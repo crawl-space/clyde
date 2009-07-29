@@ -155,6 +155,10 @@ send_key (int key, gboolean press)
 	XCloseDisplay (display);
 }
 
+/* 
+ * XXX maybe this should handle when the file goes away, rather than waiting
+ * for a devkit event 
+ * */
 gboolean
 js_data_available (GIOChannel *io, GIOCondition cond, gpointer *data)
 {
