@@ -10,6 +10,8 @@
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 
+#include <devkit-gobject/devkit-gobject.h>
+
 #include <X11/Xlib.h>
 
 #define SET_BIT(a, n) (a)[(n) / CHAR_BIT] |= \
@@ -22,8 +24,8 @@
 struct joystick {
 	char *driver_name;
 	GIOChannel *io;
-	int num_axes;
-	int num_buttons;
+	u_int8_t num_axes;
+	u_int8_t num_buttons;
 	unsigned char *active_axes;
 	int *axes_map;
 	int *button_map;
@@ -45,9 +47,9 @@ populate_map (int *map, int size)
 #define BUF_SIZE 256
 
 struct joystick *
-get_joystick (void)
+get_joystick (const char *path)
 {
-	int fd = open ("/dev/input/js0", O_RDONLY);
+	int fd = open (path, O_RDONLY);
 
 	if (fd == -1) {
 		printf ("Error opening joystick\n");
@@ -162,19 +164,64 @@ make_status_icon (void)
 	return gtk_status_icon_new_from_icon_name ("input-gaming");
 }
 
+static void
+setup_joystick (const char *path)
+{
+	struct joystick *js = get_joystick (path);
+
+	g_io_add_watch (js->io, G_IO_IN, (GIOFunc) js_data_available, js);
+}
+
+static const char *subsystems[] = {"input", NULL};
+
+static DevkitClient *
+make_devkit_client (void)
+{
+	DevkitClient *client = devkit_client_new (subsystems);
+
+	if (!devkit_client_connect (client, NULL)) {
+		return NULL;
+	}
+
+	return client;
+}
+
+static void
+setup_initial_joysticks (DevkitClient *client)
+{
+	GList *devs = devkit_client_enumerate_by_subsystem (client, subsystems,
+							    NULL);
+	GList *cur = devs;
+
+	while (cur != NULL, cur = cur->next) {
+		DevkitDevice *dev = (DevkitDevice *) cur->data;
+		const char *class = devkit_device_get_property (dev,
+								"ID_CLASS");
+
+		if (class != NULL && !strcmp ("joystick", class)) {
+			const char *path = devkit_device_get_device_file (dev);
+			const char *last_slash = rindex (path, '/');
+
+			/* We only care about /dev/input/jsX joysticks */
+			if (strstr (last_slash + 1 , "js") != NULL) {
+				printf ("joystick found at %s\n", path);
+				setup_joystick (path);
+			}
+		}
+
+		g_object_unref (dev);
+	}
+
+	g_list_free (devs);
+}
+
 int
 main (int argc, char** argv)
 {
-	struct joystick *js = get_joystick ();
-
-	if (js == NULL) {
-		printf ("No joystick found. exiting.\n");
-		return 0;
-	}
-
 	gtk_init (&argc, &argv);
 
-	g_io_add_watch (js->io, G_IO_IN, (GIOFunc) js_data_available, js);
+	DevkitClient *client = make_devkit_client ();
+	setup_initial_joysticks (client);
 
 	GtkStatusIcon *icon = make_status_icon ();
 
