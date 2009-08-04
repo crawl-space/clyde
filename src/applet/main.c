@@ -254,11 +254,24 @@ setup_initial_joysticks (DevkitClient *client, GHashTable *joysticks)
 	g_list_free (devs);
 }
 
+struct clyde_context {
+	GHashTable *joysticks;
+	DevkitClient *devkit_client;
+	GtkStatusIcon *icon;
+};
+
+static void
+update_icon_visibility (struct clyde_context *ctx)
+{
+	gtk_status_icon_set_visible (ctx->icon,
+				     g_hash_table_size (ctx->joysticks) > 0);
+}
+
 static void
 handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
 		     gpointer data)
 {
-	GHashTable *joysticks = (GHashTable *) data;
+	struct clyde_context *ctx = (struct clyde_context *) data;
 
 	if (!strcmp ("add", action)) {
 		printf ("device add detected\n");
@@ -266,41 +279,46 @@ handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
 		struct joystick *js = setup_if_joystick (dev);
 
 		if (js != NULL) {
-			g_hash_table_insert (joysticks, js->path, js);
+			g_hash_table_insert (ctx->joysticks, js->path, js);
 		}
 	} else if (!strcmp ("remove", action)) {
 		const char *path = devkit_device_get_device_file (dev);
 
 		printf ("device remove detected on %s\n", path);
 
-		struct joystick *js = g_hash_table_lookup (joysticks, path);
+		struct joystick *js = g_hash_table_lookup (ctx->joysticks,
+							   path);
 
 		if (js != NULL) {
 			printf ("no longer watching %s on %s\n",
 				js->driver_name, js->path);
-			g_hash_table_remove (joysticks, path);
+			g_hash_table_remove (ctx->joysticks, path);
 			joystick_free (js);
 		}
 	}
+
+	update_icon_visibility (ctx);
 }
 
 int
 main (int argc, char** argv)
 {
-	GHashTable *joysticks = g_hash_table_new (g_str_hash, g_str_equal);
-
+	struct clyde_context ctx;
+	
 	gtk_init (&argc, &argv);
 
-	DevkitClient *client = make_devkit_client ();
-	setup_initial_joysticks (client, joysticks);
+	ctx.joysticks = g_hash_table_new (g_str_hash, g_str_equal);
+	ctx.devkit_client = make_devkit_client ();
+	setup_initial_joysticks (ctx.devkit_client, ctx.joysticks);
 
 	printf ("%d joystick(s) found on startup\n",
-		g_hash_table_size (joysticks));
+		g_hash_table_size (ctx.joysticks));
 
-	g_signal_connect (client, "device-event",
-			  G_CALLBACK (handle_devkit_event), joysticks);
+	g_signal_connect (ctx.devkit_client, "device-event",
+			  G_CALLBACK (handle_devkit_event), &ctx);
 
-	GtkStatusIcon *icon = make_status_icon ();
+	ctx.icon = make_status_icon ();
+	update_icon_visibility (&ctx);
 
 	gtk_main ();
 
