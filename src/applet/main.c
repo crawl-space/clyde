@@ -300,6 +300,20 @@ handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
 	update_icon_visibility (ctx);
 }
 
+static void
+handle_icon_activate (GtkStatusIcon *icon, gpointer data)
+{
+	printf ("icon activated\n");
+}
+
+static void
+handle_icon_popup (GtkStatusIcon *icon, guint button, guint activate_time,
+		   gpointer data)
+{
+
+	printf ("icon popup\n");
+}
+
 int
 main (int argc, char** argv)
 {
@@ -314,11 +328,16 @@ main (int argc, char** argv)
 	printf ("%d joystick(s) found on startup\n",
 		g_hash_table_size (ctx.joysticks));
 
+	ctx.icon = make_status_icon ();
+	update_icon_visibility (&ctx);
+
 	g_signal_connect (ctx.devkit_client, "device-event",
 			  G_CALLBACK (handle_devkit_event), &ctx);
 
-	ctx.icon = make_status_icon ();
-	update_icon_visibility (&ctx);
+	g_signal_connect (ctx.icon, "activate",
+			  G_CALLBACK (handle_icon_activate), &ctx);
+	g_signal_connect (ctx.icon, "popup-menu",
+			  G_CALLBACK (handle_icon_popup), &ctx);
 
 	gtk_main ();
 
