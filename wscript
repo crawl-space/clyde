@@ -13,7 +13,7 @@ def configure(conf):
     conf.check_cfg(package="gtk+-2.0", uselib_store="GTK",
             args="--cflags --libs", mandatory=True)
 
-    conf.check_cfg(package="devkit-gobject", uselib_store="DEVKIT",
+    conf.check_cfg(package="gudev-1.0", uselib_store="GUDEV",
             args="--cflags --libs", mandatory=True)
 
 
@@ -25,7 +25,7 @@ def build(bld):
     applet = bld.new_task_gen(
             features = "cc cprogram",
             includes = "# src/applet",
-            uselib = "GLIB GDK GTK DEVKIT",
+            uselib = "GLIB GDK GTK GUDEV",
             target = "clyde"
     )
 

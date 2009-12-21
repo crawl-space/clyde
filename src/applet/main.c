@@ -10,7 +10,8 @@
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 
-#include <devkit-gobject/devkit-gobject.h>
+#define G_UDEV_API_IS_SUBJECT_TO_CHANGE
+#include <gudev/gudev.h>
 
 #include <X11/Xlib.h>
 
@@ -157,7 +158,7 @@ send_key (int key, gboolean press)
 
 /* 
  * XXX maybe this should handle when the file goes away, rather than waiting
- * for a devkit event 
+ * for a gudev event 
  * */
 gboolean
 js_data_available (GIOChannel *io, GIOCondition cond, gpointer *data)
@@ -203,25 +204,19 @@ setup_joystick (const char *path)
 
 static const char *subsystems[] = {"input", NULL};
 
-static DevkitClient *
-make_devkit_client (void)
+static GUdevClient *
+make_gudev_client (void)
 {
-	DevkitClient *client = devkit_client_new (subsystems);
-
-	if (!devkit_client_connect (client, NULL)) {
-		return NULL;
-	}
-
-	return client;
+	return g_udev_client_new (subsystems);
 }
 
 static struct joystick *
-setup_if_joystick (DevkitDevice *dev)
+setup_if_joystick (GUdevDevice *dev)
 {
-	const char *class = devkit_device_get_property (dev, "ID_CLASS");
+	const char *class = g_udev_device_get_property (dev, "ID_CLASS");
 
 	if (class != NULL && !strcmp ("joystick", class)) {
-		const char *path = devkit_device_get_device_file (dev);
+		const char *path = g_udev_device_get_device_file (dev);
 		const char *last_slash = rindex (path, '/');
 
 		/* We only care about /dev/input/jsX joysticks */
@@ -235,14 +230,13 @@ setup_if_joystick (DevkitDevice *dev)
 }
 
 static void
-setup_initial_joysticks (DevkitClient *client, GHashTable *joysticks)
+setup_initial_joysticks (GUdevClient *client, GHashTable *joysticks)
 {
-	GList *devs = devkit_client_enumerate_by_subsystem (client, subsystems,
-							    NULL);
+	GList *devs = g_udev_client_query_by_subsystem (client, subsystems[0]);
 	GList *cur = devs;
 
 	while (cur != NULL, cur = cur->next) {
-		DevkitDevice *dev = (DevkitDevice *) cur->data;
+		GUdevDevice *dev = (GUdevDevice *) cur->data;
 		struct joystick *js = setup_if_joystick (dev);
 
 		if (js != NULL) {
@@ -256,7 +250,7 @@ setup_initial_joysticks (DevkitClient *client, GHashTable *joysticks)
 
 struct clyde_context {
 	GHashTable *joysticks;
-	DevkitClient *devkit_client;
+	GUdevClient *gudev_client;
 	GtkStatusIcon *icon;
 };
 
@@ -268,7 +262,7 @@ update_icon_visibility (struct clyde_context *ctx)
 }
 
 static void
-handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
+handle_gudev_event (GUdevClient *client, char *action, GUdevDevice *dev,
 		     gpointer data)
 {
 	struct clyde_context *ctx = (struct clyde_context *) data;
@@ -282,7 +276,7 @@ handle_devkit_event (DevkitClient *client, char *action, DevkitDevice *dev,
 			g_hash_table_insert (ctx->joysticks, js->path, js);
 		}
 	} else if (!strcmp ("remove", action)) {
-		const char *path = devkit_device_get_device_file (dev);
+		const char *path = g_udev_device_get_device_file (dev);
 
 		printf ("device remove detected on %s\n", path);
 
@@ -322,8 +316,8 @@ main (int argc, char** argv)
 	gtk_init (&argc, &argv);
 
 	ctx.joysticks = g_hash_table_new (g_str_hash, g_str_equal);
-	ctx.devkit_client = make_devkit_client ();
-	setup_initial_joysticks (ctx.devkit_client, ctx.joysticks);
+	ctx.gudev_client = make_gudev_client ();
+	setup_initial_joysticks (ctx.gudev_client, ctx.joysticks);
 
 	printf ("%d joystick(s) found on startup\n",
 		g_hash_table_size (ctx.joysticks));
@@ -331,8 +325,8 @@ main (int argc, char** argv)
 	ctx.icon = make_status_icon ();
 	update_icon_visibility (&ctx);
 
-	g_signal_connect (ctx.devkit_client, "device-event",
-			  G_CALLBACK (handle_devkit_event), &ctx);
+	g_signal_connect (ctx.gudev_client, "uevent",
+			  G_CALLBACK (handle_gudev_event), &ctx);
 
 	g_signal_connect (ctx.icon, "activate",
 			  G_CALLBACK (handle_icon_activate), &ctx);
